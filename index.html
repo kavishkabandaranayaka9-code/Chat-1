@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Simple Chat</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        * { box-sizing: border-box; touch-action: manipulation; }
+        html, body { overflow: hidden; height: 100%; margin: 0; font-family: sans-serif; background: #e5ddd5; }
+        
+        /* Loader */
+        #loader {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: white; display: flex; flex-direction: column;
+            justify-content: center; align-items: center; z-index: 9999;
+        }
+        .spinner { border: 4px solid #f3f3f3; border-top: 4px solid #075e54; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        .app { display: flex; flex-direction: column; height: 100vh; }
+        .header { background: #075e54; color: white; padding: 15px; }
+        .header h1 { margin: 0; font-size: 18px; }
+        #status { font-size: 10px; opacity: 0.8; margin-top: 5px; word-break: break-all; }
+
+        /* Screens */
+        #setup-screen, #chat-screen { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+        #chat-screen { display: none; } /* Hidden by default */
+
+        /* Setup Area */
+        .setup-content { padding: 30px; flex: 1; display: flex; flex-direction: column; justify-content: center; background: white; }
+        input { padding: 15px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; margin-bottom: 10px; outline: none; width: 100%; }
+        .btn { padding: 15px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; width: 100%; font-size: 16px; }
+        .btn-green { background: #25d366; color: white; }
+
+        /* Incoming Panel */
+        #incoming-panel { 
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: rgba(0,0,0,0.9); z-index: 1000; color: white;
+            flex-direction: column; justify-content: center; align-items: center; padding: 20px;
+        }
+
+        /* Chat Area */
+        #chat-box { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 8px; }
+        .msg { padding: 10px; border-radius: 10px; max-width: 80%; font-size: 15px; }
+        .sent { background: #dcf8c6; align-self: flex-end; }
+        .received { background: white; align-self: flex-start; }
+
+        .input-bar { background: #f0f0f0; padding: 10px; display: flex; gap: 8px; border-top: 1px solid #ddd; }
+        #msg-input { margin-bottom: 0; border-radius: 20px; }
+    </style>
+</head>
+<body>
+
+<div id="loader"><div class="spinner"></div><p>Connecting...</p></div>
+
+<div class="app">
+    <div class="header">
+        <h1>Simple Chat</h1>
+        <div id="status">Starting Peer...</div>
+    </div>
+
+    <div id="incoming-panel">
+        <h2>New Request</h2>
+        <p id="caller-id" style="font-size: 11px;"></p>
+        <button class="btn btn-green" onclick="accept()">Accept & Chat</button>
+    </div>
+
+    <div id="setup-screen">
+        <div class="setup-content">
+            <input type="text" id="target-id" placeholder="Enter Friend's ID">
+            <button class="btn btn-green" onclick="connect()">Connect</button>
+        </div>
+    </div>
+
+    <div id="chat-screen">
+        <div id="chat-box"></div>
+        <div class="input-bar">
+            <input type="text" id="msg-input" placeholder="Message" autocomplete="off">
+            <button class="btn btn-green" style="width: 80px;" onclick="send()">Send</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const peer = new Peer();
+    let conn;
+
+    peer.on('open', id => {
+        document.getElementById('loader').style.display = 'none';
+        document.getElementById('status').innerText = "Your ID: " + id;
+    });
+
+    // Receiver side
+    peer.on('connection', c => {
+        conn = c;
+        document.getElementById('caller-id').innerText = c.peer;
+        document.getElementById('incoming-panel').style.display = 'flex';
+        
+        conn.on('open', () => {
+            // Wait for manual accept, so we don't call showChat() here yet
+        });
+    });
+
+    function accept() {
+        document.getElementById('incoming-panel').style.display = 'none';
+        setupConn();
+        showChat();
+    }
+
+    // Sender side
+    function connect() {
+        const id = document.getElementById('target-id').value;
+        if(!id) return;
+        conn = peer.connect(id);
+        conn.on('open', () => {
+            setupConn();
+            showChat();
+        });
+    }
+
+    function setupConn() {
+        conn.on('data', data => addMsg(data, 'received'));
+        conn.on('close', () => location.reload());
+        conn.on('error', () => location.reload());
+    }
+
+    function send() {
+        const input = document.getElementById('msg-input');
+        const txt = input.value.trim();
+        if(txt && conn && conn.open) {
+            conn.send(txt);
+            addMsg(txt, 'sent');
+            input.value = "";
+        }
+    }
+
+    function showChat() {
+        document.getElementById('setup-screen').style.display = 'none';
+        document.getElementById('chat-screen').style.display = 'flex';
+    }
+
+    function addMsg(txt, type) {
+        const box = document.getElementById('chat-box');
+        const div = document.createElement('div');
+        div.className = "msg " + type;
+        div.innerText = txt;
+        box.appendChild(div);
+        box.scrollTop = box.scrollHeight;
+    }
+
+    document.getElementById('msg-input').onkeypress = e => { if(e.key === 'Enter') send(); };
+</script>
+
+</body>
+</html>
